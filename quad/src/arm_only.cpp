@@ -41,8 +41,8 @@ int main(int argc, char *argv[])
 	att_sp.type_mask = 0b00000111;
 	att_sp.orientation.x = 0;
 	att_sp.orientation.y = 0;
-	att_sp.orientation.z = 0;
-	att_sp.orientation.w = 1;
+	att_sp.orientation.z = 0.05;
+	att_sp.orientation.w = 0.9988;
 
 	att_sp.thrust = 0.3;
 	
