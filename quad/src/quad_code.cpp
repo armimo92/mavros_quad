@@ -5,22 +5,29 @@
 #include <mavros_msgs/AttitudeTarget.h>
 #include <mavros_msgs/RCIn.h>
 #include <sensor_msgs/BatteryState.h>
+#include <geometry_msgs/Quaternion.h>
+#include <std_msgs/Float64.h>
+#include <eigen3/Eigen/Dense>
+
 
 mavros_msgs::State current_state;
-mavros_msgs::RCIn RC_values;
+
 
 mavros_msgs::SetMode offb_set_mode;
 mavros_msgs::SetMode stabilize_set_mode;
 mavros_msgs::SetMode althold_set_mode;
 
+float Motor_thrust_normalized;
+
 int switch_value;
 float battery_voltage;
+
+Eigen::Vector4f quaternion; //x,y,z,w
 
 void rc_cb(const mavros_msgs::RCIn::ConstPtr& RCmsg)
 {
 	switch_value = RCmsg->channels[4];
 }
-
 
 void state_cb(const mavros_msgs::State::ConstPtr& msg)
 {
@@ -30,6 +37,19 @@ void state_cb(const mavros_msgs::State::ConstPtr& msg)
 void battery_cb(const sensor_msgs::BatteryState::ConstPtr& Battmsg)
 {
 	battery_voltage = Battmsg->voltage;
+}
+
+void Thr_cb(const std_msgs::Float64::ConstPtr& Tmsg)
+{
+	Motor_thrust_normalized = Tmsg->data;
+}
+
+void Quat_cb(const geometry_msgs::Quaternion::ConstPtr& Quatmsg)
+{
+	quaternion(0) = Quatmsg->x;
+	quaternion(1) = Quatmsg->y;
+	quaternion(2) = Quatmsg->z;
+	quaternion(3) = Quatmsg->w;
 }
 
 
@@ -49,6 +69,8 @@ int main(int argc, char *argv[])
 	ros::Subscriber state_sub = nh.subscribe<mavros_msgs::State>("mavros/state", 10, state_cb);
 	ros::Subscriber RC_reading_sub = nh.subscribe<mavros_msgs::RCIn>("mavros/rc/in", 10, rc_cb);
 	ros::Subscriber battery_level_sub = nh.subscribe<sensor_msgs::BatteryState>("mavros/battery", 10, battery_cb);
+	ros::Subscriber normalized_thrust_sub = nh.subscribe<std_msgs::Float64>("Thrust2MAV",10, Thr_cb);
+	ros::Subscriber quaternion_sub = nh.subscribe<geometry_msgs::Quaternion>("Quat2MAV", 10, Quat_cb);
 
 	ros::ServiceClient arming_client = nh.serviceClient<mavros_msgs::CommandBool>("mavros/cmd/arming");
 	ros::ServiceClient set_mode_client = nh.serviceClient<mavros_msgs::SetMode>("mavros/set_mode");
@@ -120,28 +142,17 @@ int main(int argc, char *argv[])
 			
 			
 		}
-		
-		/*
-		if(RC_values.channels[4] >= 1700 && RC_values.channels[4] < 2100) 	//ALTITUDE HOLD FLIGHT MODE SELECTED
-		{
-			Stabilize_flag = false;
-			Offboard_flag = false;
-			AltHold_flag = true;	
-			
-			offboard_selected = false;
-			
-		}
-		*/
+
 		
 		if(offboard_selected == true && offboard_active == false)
 		{		
 			att_sp.type_mask = 0b00000111;
 			att_sp.orientation.x = 0;
 			att_sp.orientation.y = 0;
-			att_sp.orientation.z = 0.05;
-			att_sp.orientation.w = 0.9988;
+			att_sp.orientation.z = 0;
+			att_sp.orientation.w = 1;
 		
-			att_sp.thrust = 0.2;
+			att_sp.thrust = 0.3;
 			//send a few Setpoints before starting
 			for(int i = 100; i > 0; i--)
 			{
@@ -213,6 +224,14 @@ int main(int argc, char *argv[])
 		if(current_state.mode == "OFFBOARD")
 		{
 			ROS_INFO("Flight mode: Offboard");
+			att_sp.type_mask = 0b00000111;
+			att_sp.orientation.x = quaternion(0);
+			att_sp.orientation.y = quaternion(1);
+			att_sp.orientation.z = quaternion(2);
+			att_sp.orientation.w = quaternion(3);
+			
+			att_sp.thrust = Motor_thrust_normalized;
+			
 	  	setpoint_raw_attitude_pub.publish(att_sp);
 	  }
 	  
